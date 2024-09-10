@@ -196,27 +196,23 @@ void writeCompressedFile(const char *filename, struct HuffmanCode codes[], char 
     fclose(outfile);
 }
 
-
 void saveHuffmanCodesToFile(const char *filename, struct HuffmanCode codes[], int codeSize) {
-
     FILE *outfile = fopen(filename, "w");
     if (outfile == NULL) {
         printf("Error al crear el archivo de códigos Huffman.\n");
         exit(1);
     }
 
-    fprintf(outfile, "Carácter | Longitud del Código | Código Huffman\n");
+    fprintf(outfile, "Carácter (ASCII) | Longitud del Código | Código Huffman\n");
     fprintf(outfile, "---------------------------------------------\n");
     for (int i = 0; i < codeSize; i++) {
-        fprintf(outfile, "%c\t%d\t%s\n", codes[i].character, (int)strlen(codes[i].code), codes[i].code);
+        fprintf(outfile, "%d\t%d\t%s\n", (unsigned char)codes[i].character, (int)strlen(codes[i].code), codes[i].code);
     }
 
     fclose(outfile);
 }
 
-
 int main() {
-
     FILE *file;
     char filename[100];
     char outputFilename[100] = "output.huff";
@@ -229,9 +225,6 @@ int main() {
     struct dirent *entry;
     DIR *dir;
     char directory[] = "libros";
-
-   // printf("Ingresa el nombre de la carpeta: ");
-    //scanf("%s", directory);
 
     dir = opendir(directory);
     if (dir == NULL) {
@@ -250,31 +243,27 @@ int main() {
                 continue;
             }
 
-            
             char ch;
             while ((ch = fgetc(file)) != EOF) {
-                if (ch != '\n' && ch != ' ') {
-                    if (freq[(unsigned char)ch] == 0) {
-                        characters[charIndex++] = ch;
-                    }
-                    freq[(unsigned char)ch]++;
-
-                    if (textLength + 1 > textCapacity) {
-                        textCapacity = (textCapacity == 0) ? 1 : textCapacity * 2;
-                        text = (char*)realloc(text, textCapacity * sizeof(char));
-                        if (text == NULL) {
-                            printf("Error de memoria.\n");
-                            return 1;
-                        }
-                    }
-                    text[textLength++] = ch;
+                if (freq[(unsigned char)ch] == 0) {
+                    characters[charIndex++] = ch;
                 }
+                freq[(unsigned char)ch]++;
+
+                if (textLength + 1 > textCapacity) {
+                    textCapacity = (textCapacity == 0) ? 1 : textCapacity * 2;
+                    text = (char*)realloc(text, textCapacity * sizeof(char));
+                    if (text == NULL) {
+                        printf("Error de memoria.\n");
+                        return 1;
+                    }
+                }
+                text[textLength++] = ch;
             }
             fclose(file);
         }
     }
     closedir(dir);
-
 
     text = (char*)realloc(text, textLength * sizeof(char));
 
@@ -282,14 +271,10 @@ int main() {
     int codeSize = 0;
     HuffmanCodes(characters, freq, charIndex, codes, &codeSize);
 
-
     saveHuffmanCodesToFile(codesFilename, codes, codeSize);
-
-
     writeCompressedFile(outputFilename, codes, text, textLength);
 
     printf("Archivo comprimido creado exitosamente: %s\n", outputFilename);
-
 
     free(text);
     for (int i = 0; i < codeSize; i++) {
@@ -298,3 +283,4 @@ int main() {
 
     return 0;
 }
+
