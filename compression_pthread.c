@@ -247,7 +247,7 @@ void *processFile(void *arg) {
 int main() {
     FILE *file;
     char filename[100];
-    char outputFilename[100] = "output.huff";
+    char outputFilename[100] = "output_pthread.huff";
     int freq[MAX_CHAR] = {0};  
     char characters[MAX_CHAR];  
      

@@ -62,10 +62,14 @@ void loadHuffmanCodesFromFile(const char *filename) {
     }
 
     char line[256];
-    fgets(line, sizeof(line), infile); // Ignorar encabezado
+    
+    // Leer la primera línea para obtener la cantidad de códigos
+    fgets(line, sizeof(line), infile);
+    int numberOfCodes;
+    sscanf(line, "%d", &numberOfCodes);
 
     int index = 0;
-    while (fgets(line, sizeof(line), infile)) {
+    while (index < numberOfCodes && fgets(line, sizeof(line), infile)) {
         unsigned int ascii;
         int length;
         char code[256];
@@ -75,34 +79,64 @@ void loadHuffmanCodesFromFile(const char *filename) {
         codes[index].code = strdup(code); // Copiar el código
         index++;
     }
+    
     codeSize = index;
 
     fclose(infile);
+
+    printf("Códigos Huffman cargados:\n");
+    for (int i = 0; i < codeSize; i++) {
+        printf("ASCII: %u\tCódigo: %s\n", codes[i].ascii, codes[i].code);
+    }
 }
 
 // Leer el archivo comprimido en un flujo de bits
-void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLength) {
+void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLength, int codesSize) {
     FILE *infile = fopen(filename, "rb");
     if (infile == NULL) {
         printf("Error al abrir el archivo comprimido.\n");
         exit(1);
     }
 
-    fseek(infile, 0, SEEK_END);
-    *bitStreamLength = ftell(infile);
-    fseek(infile, 0, SEEK_SET);
+    // Leer la cantidad de códigos Huffman
+    int numberOfCodes;
+    fscanf(infile, "%d\n", &numberOfCodes); // Leer la cantidad de códigos en la primera línea
 
-    *bitStream = (char *)malloc(*bitStreamLength + 1);
+    // Leer los códigos Huffman (esto debe ser consistente con la función que guarda los códigos)
+    char line[256];
+    for (int i = 0; i < codesSize; i++) {
+        fgets(line, sizeof(line), infile);
+    }
+
+    // Obtener la posición actual después de leer los códigos Huffman
+    long currentPosition = ftell(infile);
+
+    // Mover al final del archivo para obtener la longitud total
+    fseek(infile, 0, SEEK_END);
+    long endPosition = ftell(infile);
+
+    // Imprimir la posición actual y la posición final
+    printf("Posición actual: %ld\n", currentPosition);
+    printf("Posición final: %ld\n", endPosition);
+
+    // Calcular el tamaño del bitstream
+    *bitStreamLength = endPosition - currentPosition;
+    
+    // Mover el puntero a la posición actual para comenzar a leer el bitstream
+    fseek(infile, currentPosition, SEEK_SET);
+
+    *bitStream = (char *)malloc(*bitStreamLength);
     if (*bitStream == NULL) {
         printf("Error de memoria.\n");
         exit(1);
     }
 
     fread(*bitStream, 1, *bitStreamLength, infile);
-    (*bitStream)[*bitStreamLength] = '\0';
+    (*bitStream)[*bitStreamLength] = '\0'; 
 
     fclose(infile);
 }
+
 
 // Decodificar el flujo de bits usando el árbol de Huffman
 void decodeHuffman(char *bitStream, int bitStreamLength, const char *outputFilename, struct HuffmanNode *root) {
@@ -131,17 +165,17 @@ void decodeHuffman(char *bitStream, int bitStreamLength, const char *outputFilen
 
 // Función principal
 int main() {
-    const char *inputFilename = "output.huff";
+    const char *inputFilename = "output.bin";
     const char *codesFilename = "codes.txt";
     const char *decompressedFilename = "decompressed.txt";
 
-    loadHuffmanCodesFromFile(codesFilename);
+    loadHuffmanCodesFromFile(inputFilename);
 
     struct HuffmanNode *root = buildHuffmanTree(codes, codeSize);
 
     char *bitStream;
     int bitStreamLength;
-    readCompressedFile(inputFilename, &bitStream, &bitStreamLength);
+    readCompressedFile(inputFilename, &bitStream, &bitStreamLength, codeSize);
 
     decodeHuffman(bitStream, bitStreamLength, decompressedFilename, root);
 

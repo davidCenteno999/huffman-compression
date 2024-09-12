@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <time.h>
 
 #define MAX_TREE_HT 3000
 #define MAX_CHAR 256
@@ -23,7 +24,10 @@ struct HuffmanCode {
     char *code;
 };
 
-
+struct BookInfo {
+    char name[200];
+    int lineCount;
+};
 
 struct MinHeapNode* newNode(char data, unsigned freq) {
     struct MinHeapNode* temp = (struct MinHeapNode*)malloc(sizeof(struct MinHeapNode));
@@ -33,7 +37,6 @@ struct MinHeapNode* newNode(char data, unsigned freq) {
     return temp;
 }
 
-
 struct MinHeap* createMinHeap(unsigned capacity) {
     struct MinHeap* minHeap = (struct MinHeap*)malloc(sizeof(struct MinHeap));
     minHeap->size = 0;
@@ -42,13 +45,11 @@ struct MinHeap* createMinHeap(unsigned capacity) {
     return minHeap;
 }
 
-
 void swapMinHeapNode(struct MinHeapNode** a, struct MinHeapNode** b) {
     struct MinHeapNode* t = *a;
     *a = *b;
     *b = t;
 }
-
 
 void minHeapify(struct MinHeap* minHeap, int idx) {
     int smallest = idx;
@@ -67,11 +68,9 @@ void minHeapify(struct MinHeap* minHeap, int idx) {
     }
 }
 
-
 int isSizeOne(struct MinHeap* minHeap) {
     return (minHeap->size == 1);
 }
-
 
 struct MinHeapNode* extractMin(struct MinHeap* minHeap) {
     struct MinHeapNode* temp = minHeap->array[0];
@@ -80,7 +79,6 @@ struct MinHeapNode* extractMin(struct MinHeap* minHeap) {
     minHeapify(minHeap, 0);
     return temp;
 }
-
 
 void insertMinHeap(struct MinHeap* minHeap, struct MinHeapNode* minHeapNode) {
     ++minHeap->size;
@@ -94,32 +92,25 @@ void insertMinHeap(struct MinHeap* minHeap, struct MinHeapNode* minHeapNode) {
     minHeap->array[i] = minHeapNode;
 }
 
-
 void buildMinHeap(struct MinHeap* minHeap) {
     int n = minHeap->size - 1;
     for (int i = (n - 1) / 2; i >= 0; --i)
         minHeapify(minHeap, i);
 }
 
-
 int isLeaf(struct MinHeapNode* root) {
     return !(root->left) && !(root->right);
 }
-
 
 struct MinHeap* createAndBuildMinHeap(char data[], int freq[], int size) {
     struct MinHeap* minHeap = createMinHeap(size);
     for (int i = 0; i < size; ++i) {
         minHeap->array[i] = newNode(data[i], freq[(unsigned char)data[i]]);
-        //printf("Data: %c, freq: %d\n", data[i], freq[i]);
     }
-    
-        
     minHeap->size = size;
     buildMinHeap(minHeap);
     return minHeap;
 }
-
 
 struct MinHeapNode* buildHuffmanTree(char data[], int freq[], int size) {
     struct MinHeapNode *left, *right, *top;
@@ -137,7 +128,6 @@ struct MinHeapNode* buildHuffmanTree(char data[], int freq[], int size) {
     return extractMin(minHeap);
 }
 
-
 void storeCodes(struct MinHeapNode* root, int arr[], int top, struct HuffmanCode codes[], int *index) {
     if (root->left) {
         arr[top] = 0;
@@ -153,37 +143,39 @@ void storeCodes(struct MinHeapNode* root, int arr[], int top, struct HuffmanCode
         codes[*index].character = root->data;
         codes[*index].code = (char*)malloc(top + 1);
         for (int i = 0; i < top; i++) {
-            codes[*index].code[i] = arr[i] + '0';  // Genera el código binario
+            codes[*index].code[i] = arr[i] + '0';
         }
         codes[*index].code[top] = '\0';
         (*index)++;
     }
 }
 
-
 void HuffmanCodes(char data[], int freq[], int size, struct HuffmanCode codes[], int *codeSize) {
-    /*printf("Carácter | Frecuencia\n");
-    printf("---------------------\n");
-    for (int i = 0; i < size; i++) {
-        printf("   %c     |    %d\n", data[i], freq[(unsigned char)data[i]]);
-    }
-    printf("\n");
-    */
     struct MinHeapNode* root = buildHuffmanTree(data, freq, size);
     int arr[MAX_TREE_HT], top = 0, index = 0;
     storeCodes(root, arr, top, codes, &index);
     *codeSize = index;
 }
 
-
-void writeCompressedFile(const char *filename, struct HuffmanCode codes[], char *text, int textLength) {
+void writeCompressedFile(const char *filename, struct HuffmanCode codes[], char *text, int textLength, int codeSize, struct BookInfo books[], int bookCount) {
     FILE *outfile = fopen(filename, "wb");
     if (outfile == NULL) {
         printf("Error al crear el archivo comprimido.\n");
         exit(1);
     }
 
-    // Escribir los códigos Huffman en el archivo comprimido
+    fprintf(outfile, "%d\n", codeSize);
+    for (int i = 0; i < codeSize; i++) {
+        fprintf(outfile, "%d\t%d\t%s\n", (unsigned char)codes[i].character, (int)strlen(codes[i].code), codes[i].code);
+    }
+
+
+
+    fprintf(outfile, "%d\n", bookCount); 
+    for (int i = 0; i < bookCount; i++) {
+        fprintf(outfile, "%s\t%d\n", books[i].name, books[i].lineCount);
+    }
+
     for (int i = 0; i < textLength; i++) {
         for (int j = 0; j < MAX_CHAR; j++) {
             if (codes[j].character == text[i]) {
@@ -215,7 +207,7 @@ void saveHuffmanCodesToFile(const char *filename, struct HuffmanCode codes[], in
 int main() {
     FILE *file;
     char filename[100];
-    char outputFilename[100] = "output.huff";
+    char outputFilename[100] = "output.bin";
     int freq[MAX_CHAR] = {0};  
     char characters[MAX_CHAR];  
     char *text = NULL;  
@@ -226,11 +218,19 @@ int main() {
     DIR *dir;
     char directory[] = "libros";
 
+    // Array to hold book information
+    struct BookInfo books[100];
+    int bookCount = 0;
+
     dir = opendir(directory);
     if (dir == NULL) {
         printf("No se puede abrir la carpeta %s\n", directory);
         return 1;
     }
+    struct timespec start, end;
+    
+    // Obtener el tiempo inicial
+    clock_gettime(CLOCK_MONOTONIC, &start);
 
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_type == DT_REG) {
@@ -243,8 +243,11 @@ int main() {
                 continue;
             }
 
+            int lineCount = 0;
             char ch;
             while ((ch = fgetc(file)) != EOF) {
+                if (ch == '\n') lineCount++;
+
                 if (freq[(unsigned char)ch] == 0) {
                     characters[charIndex++] = ch;
                 }
@@ -261,6 +264,11 @@ int main() {
                 text[textLength++] = ch;
             }
             fclose(file);
+
+            // Save book info
+            snprintf(books[bookCount].name, sizeof(books[bookCount].name), "%s", entry->d_name);
+            books[bookCount].lineCount = lineCount;
+            bookCount++;
         }
     }
     closedir(dir);
@@ -271,10 +279,33 @@ int main() {
     int codeSize = 0;
     HuffmanCodes(characters, freq, charIndex, codes, &codeSize);
 
-    saveHuffmanCodesToFile(codesFilename, codes, codeSize);
-    writeCompressedFile(outputFilename, codes, text, textLength);
+    //saveHuffmanCodesToFile(codesFilename, codes, codeSize);
+
+    //saveBooksNameLines(codesFilename, codes, codeSize);
+
+
+    writeCompressedFile(outputFilename, codes, text, textLength, codeSize, books, bookCount);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    
+    // Calcular la diferencia en nanosegundos
+    long seconds = end.tv_sec - start.tv_sec;
+    long nanoseconds = end.tv_nsec - start.tv_nsec;
+    long elapsed_ns = seconds * 1000000000 + nanoseconds;
+    double elapsed_s = elapsed_ns / 1000000000.0;
+    
+    printf("El programa tardó %ld nanosegundos en ejecutarse.\n", elapsed_ns);
+    printf("El programa tardó %.9f segundos en ejecutarse.\n", elapsed_s);
 
     printf("Archivo comprimido creado exitosamente: %s\n", outputFilename);
+
+    // Imprimir información de libros
+    //printf("\nInformación de los libros:\n");
+    //printf("Nombre del libro                   | Cantidad de líneas\n");
+    //printf("----------------------------------|-------------------\n");
+    //for (int i = 0; i < bookCount; i++) {
+    //    printf("%-34s | %d\n", books[i].name, books[i].lineCount);
+    //}
 
     free(text);
     for (int i = 0; i < codeSize; i++) {
@@ -283,4 +314,3 @@ int main() {
 
     return 0;
 }
-
