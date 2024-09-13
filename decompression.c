@@ -2,6 +2,7 @@
 #include <sys/stat.h> 
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define MAX_CHAR 256
 
@@ -16,16 +17,14 @@ struct HuffmanCode {
 };
 
 struct Books {
-    int lenght; 
+    int length; 
     char *name;
 };
 
 struct HuffmanCode codes[MAX_CHAR];
-
 struct Books books[MAX_CHAR];
 
 int codeSize = 0;
-
 int bookSize = 0;
 
 struct HuffmanNode *createNode(char character) {
@@ -69,13 +68,13 @@ void loadHuffmanCodesFromFile(const char *filename) {
     }
 
     char line[256];
-    
     fgets(line, sizeof(line), infile);
     int numberOfCodes;
     sscanf(line, "%d", &numberOfCodes);
 
     int index = 0;
     while (index < numberOfCodes && fgets(line, sizeof(line), infile)) {
+        //printf("index: %d", index);
         unsigned int ascii;
         int length;
         char code[256];
@@ -87,7 +86,6 @@ void loadHuffmanCodesFromFile(const char *filename) {
     }
 
     codeSize = index;
-
     fgets(line, sizeof(line), infile);
 
     int numberOfBooks;
@@ -97,26 +95,15 @@ void loadHuffmanCodesFromFile(const char *filename) {
     while (index < numberOfBooks && fgets(line, sizeof(line), infile)) {
         int length;
         char name[256];
-
         sscanf(line, "%s\t%d", name, &length);
 
-        books[index].name =  strdup(name);
-        books[index].lenght = length; // Copiar el código
+        books[index].name = strdup(name);
+        books[index].length = length;
         index++;
     }
 
     bookSize = index;
-    
-    
-
     fclose(infile);
-
-    /*
-    printf("Libros cargados:\n");
-    for (int i = 0; i < numberOfBooks; i++) {
-        printf("i: %s\tLenght: %d\n", books[i].name, books[i].lenght);
-    }
-    */
 }
 
 void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLength, int codesSize) {
@@ -126,30 +113,26 @@ void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLe
         exit(1);
     }
 
-
     int numberOfCodes;
-    fscanf(infile, "%d\n", &numberOfCodes); 
+    fscanf(infile, "%d\n", &numberOfCodes);
 
     char line[256];
     for (int i = 0; i < codesSize; i++) {
         fgets(line, sizeof(line), infile);
     }
     int numberOfBooks;
-    fscanf(infile, "%d\n", &numberOfBooks); 
+    fscanf(infile, "%d\n", &numberOfBooks);
 
     for (int i = 0; i < numberOfBooks; i++) {
         fgets(line, sizeof(line), infile);
     }
 
     long currentPosition = ftell(infile);
-
     fseek(infile, 0, SEEK_END);
     long endPosition = ftell(infile);
-
     *bitStreamLength = endPosition - currentPosition;
-    
-    fseek(infile, currentPosition, SEEK_SET);
 
+    fseek(infile, currentPosition, SEEK_SET);
     *bitStream = (char *)malloc(*bitStreamLength);
     if (*bitStream == NULL) {
         printf("Error de memoria.\n");
@@ -157,14 +140,10 @@ void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLe
     }
 
     fread(*bitStream, 1, *bitStreamLength, infile);
-    (*bitStream)[*bitStreamLength] = '\0'; 
-
     fclose(infile);
 }
 
-
 void decodeHuffman(char *bitStream, int bitStreamLength, const char *outputFilename, struct HuffmanNode *root) {
-    
     FILE *outfile = fopen(outputFilename, "w");
     if (outfile == NULL) {
         printf("Error al crear el archivo descomprimido.\n");
@@ -181,7 +160,7 @@ void decodeHuffman(char *bitStream, int bitStreamLength, const char *outputFilen
 
         if (current->left == NULL && current->right == NULL) {
             fputc(current->character, outfile);
-            current = root; 
+            current = root;
         }
     }
 
@@ -189,16 +168,14 @@ void decodeHuffman(char *bitStream, int bitStreamLength, const char *outputFilen
 }
 
 void decodeHuffmanMultipleFiles(char *bitStream, int bitStreamLength, struct HuffmanNode *root) {
-    int currentBook = 0;  
-    int currentLineCount = 0;  
-    char outputFilename[256];  
-    char folderName[] = "output_books";  
+    int currentBook = 0;
+    int currentLineCount = 0;
+    char outputFilename[256];
+    char folderName[] = "output_books";
 
-    
+    // Crear la carpeta de salida si no existe
     if (mkdir(folderName, 0777) == -1) {
         printf("Error al crear la carpeta o ya existe: %s\n", folderName);
-    } else {
-        //printf("Carpeta creada: %s\n", folderName);
     }
 
     snprintf(outputFilename, sizeof(outputFilename), "%s/%s", folderName, books[currentBook].name);
@@ -210,25 +187,37 @@ void decodeHuffmanMultipleFiles(char *bitStream, int bitStreamLength, struct Huf
 
     struct HuffmanNode *current = root;
     for (int i = 0; i < bitStreamLength; i++) {
+        //printf("Archivo Abierto\n");
         if (bitStream[i] == '0') {
             current = current->left;
         } else if (bitStream[i] == '1') {
             current = current->right;
         }
+        //printf("bitStream: %s\n", bitStream);
+       
         if (current->left == NULL && current->right == NULL) {
             fputc(current->character, outfile);
             if (current->character == '\n') {
-                currentLineCount++;  
+                currentLineCount++;
             }
 
-            current = root;  
-            if (currentLineCount >= books[currentBook].lenght) {
-                fclose(outfile);  
-                currentBook++;  
+            current = root;
 
+            // Verificar si se ha alcanzado el límite de líneas para el archivo actual
+            if (currentLineCount >= books[currentBook].length) {
+                
+                fclose(outfile);  // Cerrar el archivo actual
+                
+                currentBook++;
+                //printf("Archivo Cerrado\n");
+
+                // Verificar si se han procesado todos los libros
                 if (currentBook >= bookSize) {
+                    //printf("bookSize: %d\n", codeSize);
+                    
                     break;
                 }
+                
                 snprintf(outputFilename, sizeof(outputFilename), "%s/%s", folderName, books[currentBook].name);
                 outfile = fopen(outputFilename, "w");
                 if (outfile == NULL) {
@@ -236,22 +225,23 @@ void decodeHuffmanMultipleFiles(char *bitStream, int bitStreamLength, struct Huf
                     exit(1);
                 }
 
-                currentLineCount = 0; 
+                currentLineCount = 0;  // Reiniciar el contador de líneas
             }
         }
+        
     }
 
-    // Cerrar archivo
-    if (outfile != NULL) {
-        fclose(outfile);
-    }
 }
 
 
 int main() {
     const char *inputFilename = "output.bin";
     const char *codesFilename = "codes.txt";
-    const char *decompressedFilename = "decompressed.txt";
+    //const char *decompressedFilename = "decompressed.txt";
+    
+    struct timespec start, end;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
 
     loadHuffmanCodesFromFile(inputFilename);
 
@@ -259,17 +249,34 @@ int main() {
 
     char *bitStream;
     int bitStreamLength;
+
+    
     readCompressedFile(inputFilename, &bitStream, &bitStreamLength, codeSize);
 
-    //decodeHuffman(bitStream, bitStreamLength, decompressedFilename, root);
+    
 
     decodeHuffmanMultipleFiles(bitStream, bitStreamLength, root);
 
-    //printf("Archivo descomprimido creado exitosamente: %s\n", decompressedFilename);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    
+    // Calcular la diferencia en nanosegundos
+    long seconds = end.tv_sec - start.tv_sec;
+    long nanoseconds = end.tv_nsec - start.tv_nsec;
+    long elapsed_ns = seconds * 1000000000 + nanoseconds;
+    double elapsed_s = elapsed_ns / 1000000000.0;
+    
+    printf("El programa tardó %ld nanosegundos en ejecutarse.\n", elapsed_ns);
+    printf("El programa tardó %.9f segundos en ejecutarse.\n", elapsed_s);
 
-    free(bitStream);
+    printf("Archivo descomprimido exitosamente: output_books\n");
+
+    //free(bitStream);
     for (int i = 0; i < codeSize; i++) {
-        free(codes[i].code);
+        //free(codes[i].code);
+    }
+
+    for (int i = 0; i < bookSize; i++) {
+        //free(books[i].name);
     }
 
     return 0;

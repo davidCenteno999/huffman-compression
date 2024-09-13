@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <time.h>
 
+
 #define MAX_TREE_HT 3000
 #define MAX_CHAR 256
 
@@ -195,8 +196,8 @@ void saveHuffmanCodesToFile(const char *filename, struct HuffmanCode codes[], in
         exit(1);
     }
 
-    fprintf(outfile, "Carácter (ASCII) | Longitud del Código | Código Huffman\n");
-    fprintf(outfile, "---------------------------------------------\n");
+    //fprintf(outfile, "Carácter (ASCII) | Longitud del Código | Código Huffman\n");
+    //fprintf(outfile, "---------------------------------------------\n");
     for (int i = 0; i < codeSize; i++) {
         fprintf(outfile, "%d\t%d\t%s\n", (unsigned char)codes[i].character, (int)strlen(codes[i].code), codes[i].code);
     }
@@ -245,8 +246,14 @@ int main() {
 
             int lineCount = 0;
             char ch;
-            while ((ch = fgetc(file)) != EOF) {
-                if (ch == '\n') lineCount++;
+            while (!feof(file)) {
+                ch = fgetc(file);
+                if (ch == EOF) break;
+                if (ch == '\n') {
+                    
+                    lineCount++;
+                }
+                //printf("ch: %c\n", ch);
 
                 if (freq[(unsigned char)ch] == 0) {
                     characters[charIndex++] = ch;
@@ -262,6 +269,7 @@ int main() {
                     }
                 }
                 text[textLength++] = ch;
+                
             }
             fclose(file);
 
