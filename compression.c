@@ -249,11 +249,11 @@ int main() {
             while (!feof(file)) {
                 ch = fgetc(file);
                 if (ch == EOF) break;
+                if (ch == 255) break;
                 if (ch == '\n') {
-                    
                     lineCount++;
                 }
-                //printf("ch: %c\n", ch);
+                //printf("ch: %d\n", ch);
 
                 if (freq[(unsigned char)ch] == 0) {
                     characters[charIndex++] = ch;
@@ -322,3 +322,4 @@ int main() {
 
     return 0;
 }
+
