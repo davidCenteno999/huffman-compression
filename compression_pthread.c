@@ -3,10 +3,13 @@
 #include <string.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <time.h>
 
 #define MAX_TREE_HT 3000
 #define MAX_CHAR 256
-#define NUM_THREADS 100
+
+
+
 
 struct MinHeapNode {
     char data;
@@ -25,15 +28,34 @@ struct HuffmanCode {
     char *code;
 };
 
-struct ThreadData {
-    char *filepath;
-    int *freq;
-    char *characters;
-    int *charIndex;
-    pthread_mutex_t *mutex;
+struct BookInfo {
+    char name[200];
+    int lineCount;
 };
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+char *text = NULL;
+int textLength = 0, textCapacity = 0;
+int freq[MAX_CHAR] = {0};
+char characters[MAX_CHAR];
+int charIndex = 0;
+struct BookInfo books[100];
+int bookCount = 0;
+
+struct ThreadData {
+    int localFreq[MAX_CHAR];
+    char localCharacters[MAX_CHAR];
+    int localCharIndex;
+    char *localText;
+    int localTextLength;
+    int localTextCapacity;
+    struct BookInfo localBooks[100];
+    int localBookCount;
+};
+
+
+pthread_mutex_t lock;
+
+// Funciones para manejo del Árbol de Huffman (como en tu código original)
 
 struct MinHeapNode* newNode(char data, unsigned freq) {
     struct MinHeapNode* temp = (struct MinHeapNode*)malloc(sizeof(struct MinHeapNode));
@@ -113,7 +135,6 @@ struct MinHeap* createAndBuildMinHeap(char data[], int freq[], int size) {
     for (int i = 0; i < size; ++i) {
         minHeap->array[i] = newNode(data[i], freq[(unsigned char)data[i]]);
     }
-
     minHeap->size = size;
     buildMinHeap(minHeap);
     return minHeap;
@@ -150,7 +171,7 @@ void storeCodes(struct MinHeapNode* root, int arr[], int top, struct HuffmanCode
         codes[*index].character = root->data;
         codes[*index].code = (char*)malloc(top + 1);
         for (int i = 0; i < top; i++) {
-            codes[*index].code[i] = arr[i] + '0';  // Genera el código binario
+            codes[*index].code[i] = arr[i] + '0';
         }
         codes[*index].code[top] = '\0';
         (*index)++;
@@ -164,11 +185,21 @@ void HuffmanCodes(char data[], int freq[], int size, struct HuffmanCode codes[],
     *codeSize = index;
 }
 
-void writeCompressedFile(const char *filename, struct HuffmanCode codes[], char *text, int textLength) {
+void writeCompressedFile(const char *filename, struct HuffmanCode codes[], char *text, int textLength, int codeSize, struct BookInfo books[], int bookCount) {
     FILE *outfile = fopen(filename, "wb");
     if (outfile == NULL) {
         printf("Error al crear el archivo comprimido.\n");
         exit(1);
+    }
+
+    fprintf(outfile, "%d\n", codeSize);
+    for (int i = 0; i < codeSize; i++) {
+        fprintf(outfile, "%d\t%d\t%s\n", (unsigned char)codes[i].character, (int)strlen(codes[i].code), codes[i].code);
+    }
+
+    fprintf(outfile, "%d\n", bookCount); 
+    for (int i = 0; i < bookCount; i++) {
+        fprintf(outfile, "%s\t%d\n", books[i].name, books[i].lineCount);
     }
 
     for (int i = 0; i < textLength; i++) {
@@ -183,82 +214,109 @@ void writeCompressedFile(const char *filename, struct HuffmanCode codes[], char 
     fclose(outfile);
 }
 
-void saveHuffmanCodesToFile(const char *filename, struct HuffmanCode codes[], int codeSize) {
-    FILE *outfile = fopen(filename, "w");
-    if (outfile == NULL) {
-        printf("Error al crear el archivo de códigos Huffman.\n");
-        exit(1);
-    }
-
-    fprintf(outfile, "Carácter (ASCII) | Longitud del Código | Código Huffman\n");
-    fprintf(outfile, "---------------------------------------------\n");
-    for (int i = 0; i < codeSize; i++) {
-        fprintf(outfile, "%d\t%d\t%s\n", (unsigned char)codes[i].character, (int)strlen(codes[i].code), codes[i].code);
-    }
-
-    fclose(outfile);
-}
-
-
-char *text = NULL; 
-int textLength = 0, textCapacity = 0;
-
-
 void *processFile(void *arg) {
-    struct ThreadData *data = (struct ThreadData *)arg;
-    FILE *file = fopen(data->filepath, "r");
+    char *filepath = (char*)arg;
+    FILE *file = fopen(filepath, "r");
     if (file == NULL) {
-        printf("No se puede abrir el archivo %s\n", data->filepath);
-        pthread_exit(NULL);
+        printf("No se puede abrir el archivo %s\n", filepath);
+        return NULL;
     }
 
+    // Inicializar datos locales
+    struct ThreadData threadData = {0};
+    threadData.localText = NULL;
+    threadData.localTextLength = 0;
+    threadData.localTextCapacity = 0;
+    threadData.localCharIndex = 0;
+    threadData.localBookCount = 0;
+
+    char buffer[4096];
+    size_t bytesRead;
+    int lineCount = 0;
     char ch;
-    while ((ch = fgetc(file)) != EOF) {
-        pthread_mutex_lock(data->mutex);
-
-        if (data->freq[(unsigned char)ch] == 0) {
-            data->characters[(*data->charIndex)++] = ch;
-        }
-        data->freq[(unsigned char)ch]++;
-
-        // Reasignar memoria para 'text' con protección de mutex
-        if (textLength + 1 > textCapacity) {
-            textCapacity = (textCapacity == 0) ? 1 : textCapacity * 2;
-            char *newText = (char*)realloc(text, textCapacity * sizeof(char));
-            if (newText == NULL) {
-                printf("Error de memoria.\n");
-                pthread_mutex_unlock(data->mutex);
-                fclose(file);
-                pthread_exit(NULL);
+    while ((bytesRead = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        for (size_t i = 0; i < bytesRead; i++) {
+            char ch = buffer[i];
+            if (ch == '\n') {
+                lineCount++;
             }
-            text = newText;
+
+            if (threadData.localFreq[(unsigned char)ch] == 0) {
+                threadData.localCharacters[threadData.localCharIndex++] = ch;
+            }
+            threadData.localFreq[(unsigned char)ch]++;
+            
+            if (threadData.localTextLength + 1 > threadData.localTextCapacity) {
+                threadData.localTextCapacity = (threadData.localTextCapacity == 0) ? 1 : threadData.localTextCapacity * 2;
+                threadData.localText = (char*)realloc(threadData.localText, threadData.localTextCapacity * sizeof(char));
+            }
+            threadData.localText[threadData.localTextLength++] = ch;
         }
-
-        text[textLength++] = ch;
-
-        pthread_mutex_unlock(data->mutex);
     }
 
     fclose(file);
-    pthread_exit(NULL);
+
+    // Obtener solo el nombre del archivo sin la ruta
+    char *filename = strrchr(filepath, '/');
+    if (filename == NULL) {
+        filename = filepath;  // Si no hay '/', significa que no hay ruta y solo es el nombre del archivo
+    } else {
+        filename++;  // Saltar el '/' para obtener el nombre del archivo
+    }
+
+    // Guardar la información del libro en local
+    snprintf(threadData.localBooks[threadData.localBookCount].name, sizeof(threadData.localBooks[threadData.localBookCount].name), "%s", filename);
+    threadData.localBooks[threadData.localBookCount].lineCount = lineCount;
+    threadData.localBookCount++;
+
+    // Fusionar datos locales en datos globales
+    pthread_mutex_lock(&lock);
+    for (int i = 0; i < MAX_CHAR; i++) {
+        freq[i] += threadData.localFreq[i];
+    }
+
+    for (int i = 0; i < threadData.localCharIndex; i++) {
+        int found = 0;
+        for (int j = 0; j < charIndex; j++) {
+            if (characters[j] == threadData.localCharacters[i]) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            characters[charIndex++] = threadData.localCharacters[i];
+        }
+    }
+
+    if (textLength + threadData.localTextLength > textCapacity) {
+        textCapacity = textLength + threadData.localTextLength;
+        text = (char*)realloc(text, textCapacity * sizeof(char));
+    }
+
+    memcpy(text + textLength, threadData.localText, threadData.localTextLength * sizeof(char));
+    textLength += threadData.localTextLength;
+
+    for (int i = 0; i < threadData.localBookCount; i++) {
+        snprintf(books[bookCount].name, sizeof(books[bookCount].name), "%s", threadData.localBooks[i].name);
+        books[bookCount].lineCount = threadData.localBooks[i].lineCount;
+        bookCount++;
+    }
+
+    pthread_mutex_unlock(&lock);
+
+    free(threadData.localText);
+    free(filepath);
+    return NULL;
 }
 
-
 int main() {
-    FILE *file;
-    char filename[100];
-    char outputFilename[100] = "output_pthread.huff";
-    int freq[MAX_CHAR] = {0};  
-    char characters[MAX_CHAR];  
-     
-    int charIndex = 0;
-    char codesFilename[100] = "codes.txt";
+    pthread_t threads[100];
+    int threadCount = 0;
+    char outputFilename[100] = "output_thread.bin";
 
     struct dirent *entry;
     DIR *dir;
     char directory[] = "libros";
-    pthread_t threads[NUM_THREADS];
-    struct ThreadData threadData[NUM_THREADS];
 
     dir = opendir(directory);
     if (dir == NULL) {
@@ -266,55 +324,45 @@ int main() {
         return 1;
     }
 
-    int threadCount = 0;
+    pthread_mutex_init(&lock, NULL);
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            char filepath[200];
+         if (entry->d_type == DT_REG) {
+            char filepath[256];
             snprintf(filepath, sizeof(filepath), "%s/%s", directory, entry->d_name);
-
-            if (threadCount >= NUM_THREADS) {
-                // Esperar a que todos los hilos terminen antes de crear nuevos hilos
-                for (int i = 0; i < NUM_THREADS; i++) {
-                    pthread_join(threads[i], NULL);
-                }
-                threadCount = 0;
-            }
-
-            threadData[threadCount].filepath = filepath;
-            threadData[threadCount].freq = freq;
-            threadData[threadCount].characters = characters;
-            threadData[threadCount].charIndex = &charIndex;
-            threadData[threadCount].mutex = &mutex;
-
-            if (pthread_create(&threads[threadCount], NULL, processFile, (void *)&threadData[threadCount])) {
-                printf("Error al crear el hilo.\n");
-                return 1;
-            }
-            threadCount++;
+            pthread_create(&threads[threadCount++], NULL, processFile, strdup(filepath));
         }
     }
+
     closedir(dir);
 
-    // Asegurarse de que todos los hilos hayan terminado
     for (int i = 0; i < threadCount; i++) {
         pthread_join(threads[i], NULL);
     }
-
-    
-
+    clock_gettime(CLOCK_MONOTONIC, &end);
     struct HuffmanCode codes[MAX_CHAR];
     int codeSize = 0;
     HuffmanCodes(characters, freq, charIndex, codes, &codeSize);
 
-    saveHuffmanCodesToFile(codesFilename, codes, codeSize);
-    writeCompressedFile(outputFilename, codes, text, textLength);
+    writeCompressedFile(outputFilename, codes, text, textLength, codeSize, books, bookCount);
 
+   
+    long seconds = end.tv_sec - start.tv_sec;
+    long nanoseconds = end.tv_nsec - start.tv_nsec;
+    long elapsed_ns = seconds * 1000000000 + nanoseconds;
+    double elapsed_s = elapsed_ns / 1000000000.0;
+    
+    printf("El programa tardó %ld nanosegundos en ejecutarse.\n", elapsed_ns);
+    printf("El programa tardó %.9f segundos en ejecutarse.\n", elapsed_s);
     printf("Archivo comprimido creado exitosamente: %s\n", outputFilename);
 
+   
+
+    pthread_mutex_destroy(&lock);
     free(text);
-    for (int i = 0; i < codeSize; i++) {
-        free(codes[i].code);
-    }
 
     return 0;
 }
