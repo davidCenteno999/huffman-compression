@@ -21,6 +21,8 @@ struct HuffmanCode {
 struct Books {
     int length; 
     char *name;
+    int start;
+    int end;
 };
 
 struct HuffmanCode codes[MAX_CHAR];
@@ -153,7 +155,40 @@ void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLe
     fclose(infile);
 }
 
+void calculateBitIndex(char *bitStream, int bitStreamLength, struct HuffmanNode *root) {
+    int currentBook = 0;
+    int currentLineCount = 0;
+    struct HuffmanNode *current = root;
 
+    for (int i = 0; i < bitStreamLength; i++) {
+        if (currentLineCount == 0) {
+            books[currentBook].start = i;
+        }
+
+        if (bitStream[i] == '0') {
+            current = current->left;
+        } else if (bitStream[i] == '1') {
+            current = current->right;
+        }
+
+        if (current->left == NULL && current->right == NULL) {
+            if (current->character == '\n') {
+                currentLineCount++;
+            }
+
+            current = root;
+
+            if (currentLineCount >= books[currentBook].length) {
+                books[currentBook].end = i;
+                currentBook++;
+                if (currentBook >= bookSize) {
+                    break;
+                }
+                currentLineCount = 0;  // Reiniciar el contador de líneas para el próximo libro
+            }
+        }
+    }
+}
 
 
 int bitIndex = 0;
@@ -164,6 +199,8 @@ void *decodeBook(void *arg) {
     char outputFilename[256];
     int currentLineCount = 0;
     struct HuffmanNode *current = root;
+
+
     pthread_mutex_lock(&fileLock);
     snprintf(outputFilename, sizeof(outputFilename), "%s/%s", folderName, books[bookIndex].name);
     FILE *outfile = fopen(outputFilename, "w");
@@ -173,10 +210,10 @@ void *decodeBook(void *arg) {
         pthread_exit(NULL);
     }
     
-    for (; bitIndex < bitStreamLength; bitIndex++) {
-        if (bitStream[bitIndex] == '0') {
+    for (int i = books[bookIndex].start; i < books[bookIndex].end; i++) {
+        if (bitStream[i] == '0') {
             current = current->left;
-        } else if (bitStream[bitIndex] == '1') {
+        } else if (bitStream[i] == '1') {
             current = current->right;
         }
 
@@ -198,7 +235,7 @@ void *decodeBook(void *arg) {
         }
     }
 
-    bookIndex++;
+    //bookIndex++;
     fclose(outfile);
 
     pthread_mutex_unlock(&fileLock); 
@@ -206,6 +243,12 @@ void *decodeBook(void *arg) {
     
     pthread_exit(NULL);
 }
+
+
+
+
+
+
 
 int main() {
     const char *inputFilename = "output_thread.bin";
@@ -218,7 +261,7 @@ int main() {
     root = buildHuffmanTree(codes, codeSize);
 
     readCompressedFile(inputFilename, &bitStream, &bitStreamLength, codeSize);
-
+    calculateBitIndex(bitStream, bitStreamLength, root);
     
     mkdir(folderName, 0777);
 
