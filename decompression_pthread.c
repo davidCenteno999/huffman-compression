@@ -194,20 +194,19 @@ void calculateBitIndex(char *bitStream, int bitStreamLength, struct HuffmanNode 
 int bitIndex = 0;
 
 void *decodeBook(void *arg) {
-
     int bookIndex = *(int *)arg;
     char outputFilename[256];
     int currentLineCount = 0;
     struct HuffmanNode *current = root;
 
-
-    pthread_mutex_lock(&fileLock);
+   
     snprintf(outputFilename, sizeof(outputFilename), "%s/%s", folderName, books[bookIndex].name);
+    
+   
     FILE *outfile = fopen(outputFilename, "w");
     if (outfile == NULL) {
         printf("Error al crear el archivo descomprimido: %s\n", outputFilename);
-        pthread_mutex_unlock(&fileLock);  
-        pthread_exit(NULL);
+        pthread_exit(NULL);  
     }
     
     for (int i = books[bookIndex].start; i < books[bookIndex].end; i++) {
@@ -218,9 +217,10 @@ void *decodeBook(void *arg) {
         }
 
         if (current->left == NULL && current->right == NULL) {
-            
+            // Sección crítica: escribir el carácter en el archivo (protegido por mutex)
+            pthread_mutex_lock(&fileLock);
             fputc(current->character, outfile);
-             
+            pthread_mutex_unlock(&fileLock);
 
             if (current->character == '\n') {
                 currentLineCount++;
@@ -228,21 +228,17 @@ void *decodeBook(void *arg) {
 
             current = root;
 
-            
             if (currentLineCount >= books[bookIndex].length) {
                 break;
             }
         }
     }
 
-    //bookIndex++;
-    fclose(outfile);
+    fclose(outfile);  
 
-    pthread_mutex_unlock(&fileLock); 
-    
-    
-    pthread_exit(NULL);
+    pthread_exit(NULL);  
 }
+
 
 
 
@@ -255,7 +251,7 @@ int main() {
     const char *codesFilename = "codes.txt";
 
     struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC, &start);
+   
 
     loadHuffmanCodesFromFile(inputFilename);
     root = buildHuffmanTree(codes, codeSize);
@@ -267,7 +263,7 @@ int main() {
 
     pthread_t threads[MAX_THREADS];
     int threadArgs[MAX_THREADS];
-
+     clock_gettime(CLOCK_MONOTONIC, &start);
     // Crear un hilo por cada libro
     for (int i = 0; i < bookSize; i++) {
         threadArgs[i] = i;

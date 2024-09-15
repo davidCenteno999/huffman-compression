@@ -219,7 +219,8 @@ void *processFile(void *arg) {
     FILE *file = fopen(filepath, "r");
     if (file == NULL) {
         printf("No se puede abrir el archivo %s\n", filepath);
-        return NULL;
+        free(filepath); 
+        pthread_exit(NULL);
     }
 
     // Inicializar datos locales
@@ -233,7 +234,8 @@ void *processFile(void *arg) {
     char buffer[4096];
     size_t bytesRead;
     int lineCount = 0;
-    char ch;
+
+    
     while ((bytesRead = fread(buffer, 1, sizeof(buffer), file)) > 0) {
         for (size_t i = 0; i < bytesRead; i++) {
             char ch = buffer[i];
@@ -245,10 +247,18 @@ void *processFile(void *arg) {
                 threadData.localCharacters[threadData.localCharIndex++] = ch;
             }
             threadData.localFreq[(unsigned char)ch]++;
-            
+
+           
             if (threadData.localTextLength + 1 > threadData.localTextCapacity) {
                 threadData.localTextCapacity = (threadData.localTextCapacity == 0) ? 1 : threadData.localTextCapacity * 2;
-                threadData.localText = (char*)realloc(threadData.localText, threadData.localTextCapacity * sizeof(char));
+                char *newText = realloc(threadData.localText, threadData.localTextCapacity * sizeof(char));
+                if (!newText) {
+                    free(threadData.localText);
+                    fclose(file);
+                    free(filepath);
+                    pthread_exit(NULL);  
+                }
+                threadData.localText = newText;
             }
             threadData.localText[threadData.localTextLength++] = ch;
         }
@@ -256,21 +266,22 @@ void *processFile(void *arg) {
 
     fclose(file);
 
-    // Obtener solo el nombre del archivo sin la ruta
+    
     char *filename = strrchr(filepath, '/');
     if (filename == NULL) {
-        filename = filepath;  // Si no hay '/', significa que no hay ruta y solo es el nombre del archivo
+        filename = filepath;   
     } else {
-        filename++;  // Saltar el '/' para obtener el nombre del archivo
+        filename++;  
     }
 
-    // Guardar la información del libro en local
+    
     snprintf(threadData.localBooks[threadData.localBookCount].name, sizeof(threadData.localBooks[threadData.localBookCount].name), "%s", filename);
     threadData.localBooks[threadData.localBookCount].lineCount = lineCount;
     threadData.localBookCount++;
 
-    // Fusionar datos locales en datos globales
+    // Fusionar datos locales en los datos globales (sección crítica protegida por mutex)
     pthread_mutex_lock(&lock);
+
     for (int i = 0; i < MAX_CHAR; i++) {
         freq[i] += threadData.localFreq[i];
     }
@@ -290,7 +301,15 @@ void *processFile(void *arg) {
 
     if (textLength + threadData.localTextLength > textCapacity) {
         textCapacity = textLength + threadData.localTextLength;
-        text = (char*)realloc(text, textCapacity * sizeof(char));
+        char *newText = realloc(text, textCapacity * sizeof(char));
+        if (!newText) {
+            free(text);
+            pthread_mutex_unlock(&lock);
+            free(threadData.localText);
+            free(filepath);
+            pthread_exit(NULL);  
+        }
+        text = newText;
     }
 
     memcpy(text + textLength, threadData.localText, threadData.localTextLength * sizeof(char));
@@ -302,11 +321,13 @@ void *processFile(void *arg) {
         bookCount++;
     }
 
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&lock);  
 
+    
     free(threadData.localText);
     free(filepath);
-    return NULL;
+
+    pthread_exit(NULL);
 }
 
 int main() {
@@ -329,8 +350,9 @@ int main() {
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
+    // Crear hilos para cada archivo en el directorio
     while ((entry = readdir(dir)) != NULL) {
-         if (entry->d_type == DT_REG) {
+        if (entry->d_type == DT_REG) {
             char filepath[256];
             snprintf(filepath, sizeof(filepath), "%s/%s", directory, entry->d_name);
             pthread_create(&threads[threadCount++], NULL, processFile, strdup(filepath));
@@ -339,27 +361,27 @@ int main() {
 
     closedir(dir);
 
+    // Esperar a que todos los hilos terminen
     for (int i = 0; i < threadCount; i++) {
         pthread_join(threads[i], NULL);
     }
+
     clock_gettime(CLOCK_MONOTONIC, &end);
+
     struct HuffmanCode codes[MAX_CHAR];
     int codeSize = 0;
     HuffmanCodes(characters, freq, charIndex, codes, &codeSize);
 
     writeCompressedFile(outputFilename, codes, text, textLength, codeSize, books, bookCount);
 
-   
     long seconds = end.tv_sec - start.tv_sec;
     long nanoseconds = end.tv_nsec - start.tv_nsec;
     long elapsed_ns = seconds * 1000000000 + nanoseconds;
     double elapsed_s = elapsed_ns / 1000000000.0;
-    
+
     printf("El programa tardó %ld nanosegundos en ejecutarse.\n", elapsed_ns);
     printf("El programa tardó %.9f segundos en ejecutarse.\n", elapsed_s);
     printf("Archivo comprimido creado exitosamente: %s\n", outputFilename);
-
-   
 
     pthread_mutex_destroy(&lock);
     free(text);
