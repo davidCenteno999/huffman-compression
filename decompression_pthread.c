@@ -106,6 +106,8 @@ void loadHuffmanCodesFromFile(const char *filename) {
 
         books[index].name = strdup(name);
         books[index].length = length;
+        //printf("Nombre del libro: %s\n", books[index].name);
+        //printf("Longitud del libro (en líneas): %d\n", books[index].length);
         index++;
     }
 
@@ -145,6 +147,7 @@ void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLe
         printf("Error de memoria.\n");
         exit(1);
     }
+    
 
     fread(*bitStream, 1, *bitStreamLength, infile);
     fclose(infile);
@@ -153,11 +156,14 @@ void readCompressedFile(const char *filename, char **bitStream, int *bitStreamLe
 
 
 
+int bitIndex = 0;
+
 void *decodeBook(void *arg) {
+
     int bookIndex = *(int *)arg;
     char outputFilename[256];
-
-    
+    int currentLineCount = 0;
+    struct HuffmanNode *current = root;
     pthread_mutex_lock(&fileLock);
     snprintf(outputFilename, sizeof(outputFilename), "%s/%s", folderName, books[bookIndex].name);
     FILE *outfile = fopen(outputFilename, "w");
@@ -166,43 +172,38 @@ void *decodeBook(void *arg) {
         pthread_mutex_unlock(&fileLock);  
         pthread_exit(NULL);
     }
-    pthread_mutex_unlock(&fileLock);  
-
-    struct HuffmanNode *current = root;
-    int currentLineCount = 0;
-    int bitIndex = 0;
-
     
-    pthread_mutex_lock(&bitStreamLock);
-    for (int i = 0; i < bookSize; i++) {
-        for (; bitIndex < bitStreamLength; bitIndex++) {
-            if (bitStream[bitIndex] == '0') {
-                current = current->left;
-            } else if (bitStream[bitIndex] == '1') {
-                current = current->right;
+    for (; bitIndex < bitStreamLength; bitIndex++) {
+        if (bitStream[bitIndex] == '0') {
+            current = current->left;
+        } else if (bitStream[bitIndex] == '1') {
+            current = current->right;
+        }
+
+        if (current->left == NULL && current->right == NULL) {
+            
+            fputc(current->character, outfile);
+             
+
+            if (current->character == '\n') {
+                currentLineCount++;
             }
 
-            if (current->left == NULL && current->right == NULL) {
-                pthread_mutex_lock(&fileLock); 
-                fputc(current->character, outfile);
-                pthread_mutex_unlock(&fileLock);  
+            current = root;
 
-                if (current->character == '\n') {
-                    currentLineCount++;
-                }
-
-                current = root;
-
-               
-                if (currentLineCount >= books[bookIndex].length) {
-                    break;
-                }
+            
+            if (currentLineCount >= books[bookIndex].length) {
+                break;
             }
         }
     }
-    pthread_mutex_unlock(&bitStreamLock);  
 
+    bookIndex++;
     fclose(outfile);
+
+    pthread_mutex_unlock(&fileLock); 
+    
+    
     pthread_exit(NULL);
 }
 
