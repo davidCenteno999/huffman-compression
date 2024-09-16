@@ -251,7 +251,7 @@ void decodeBook(int bookIndex, int fd[2]) {
 }
 
 int main() {
-    const char *inputFilename = "output.bin";
+    const char *inputFilename = "output_pipe.bin";
     const char *codesFilename = "codes.txt";
 
     struct timespec start, end;
