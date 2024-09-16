@@ -226,7 +226,7 @@ pthread_mutex_t booksMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int main() {
     FILE *file;
-    char outputFilename[100] = "output_pipe.bin";
+    char outputFilename[100] = "output.bin";
 
     int *freq = mmap(NULL, MAX_CHAR * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     memset(freq, 0, MAX_CHAR * sizeof(int));

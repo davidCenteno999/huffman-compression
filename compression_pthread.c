@@ -366,13 +366,15 @@ int main() {
         pthread_join(threads[i], NULL);
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &end);
+    
 
     struct HuffmanCode codes[MAX_CHAR];
     int codeSize = 0;
     HuffmanCodes(characters, freq, charIndex, codes, &codeSize);
 
     writeCompressedFile(outputFilename, codes, text, textLength, codeSize, books, bookCount);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
 
     long seconds = end.tv_sec - start.tv_sec;
     long nanoseconds = end.tv_nsec - start.tv_nsec;
