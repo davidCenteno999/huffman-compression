@@ -8,8 +8,4 @@ gcc --version
 
 sudo dnf install git
 
-git clone https://github.com/davidCenteno999/huffman-compression.git
-
-cd huffman-compression
-
 make
