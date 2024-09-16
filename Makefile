@@ -4,8 +4,8 @@ COMPRESSOR = compression
 COMPRESSOR1 = compression_pthread
 COMPRESSOR2 = compression_pipe
 DECOMPRESSOR = decompression
-DECOMPRESSOR2 = decompression_pthread
-DECOMPRESSOR3 = decompression_pipe
+DECOMPRESSOR1 = decompression_pthread
+DECOMPRESSOR2 = decompression_pipe
 
 all: compress1 compress2 compress3 decompress1 decompress2 decompress3
 
