@@ -244,9 +244,9 @@ void decodeBook(int bookIndex, int fd[2]) {
     }
 
     if (bufferIndex > 0) {
-        write(fd[1], buffer, bufferIndex);  // Escribimos lo que queda en el buffer
+        write(fd[1], buffer, bufferIndex);
     }
-    close(fd[1]);  // Cerramos la escritura en el proceso hijo
+    close(fd[1]);  
     exit(0);
 }
 
@@ -267,14 +267,14 @@ int main() {
     clock_gettime(CLOCK_MONOTONIC, &start);
 
     for (int i = 0; i < bookSize; i++) {
-        int fd[2];  // Creamos la tubería
+        int fd[2];  
         pipe(fd);
-        pid_t pid = fork();  // Creamos un proceso hijo
+        pid_t pid = fork();  
 
-        if (pid == 0) {  // Código del proceso hijo
+        if (pid == 0) {  
             decodeBook(i, fd);
         } else {  // Código del proceso padre
-            close(fd[1]);  // Cerramos la escritura en el proceso padre, solo leemos.
+            close(fd[1]); 
 
             char outputFilename[256];
             snprintf(outputFilename, sizeof(outputFilename), "%s/%s", folderName, books[i].name);
@@ -298,7 +298,7 @@ int main() {
     }
 
     for (int i = 0; i < bookSize; i++) {
-        wait(NULL);  // Esperamos a que todos los procesos hijos terminen
+        wait(NULL);  
     }
 
     clock_gettime(CLOCK_MONOTONIC, &end);
